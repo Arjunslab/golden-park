@@ -49,7 +49,7 @@
     const [shopnumber, setShopnumber] = useState("");
     const [name, setName] = useState("");
     const [email, setEmail] = useState("");
-    const [phone, setPhone] = useState("");
+    const [phone, setPhone] = useState("Shop Owner");
     // const [unverifiedphone, setunverifiedphone] = useState("")
     const [role, setrole] = useState("")
     const [area, setArea] = useState("");
@@ -170,7 +170,7 @@
                   Owner Phone
                 </label>
                 <input
-                  type="text"
+                  type="phone"
                   name="phone"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
@@ -184,7 +184,7 @@
                   Shop Area (sq ft)
                 </label>
                 <input
-                  type="text"
+                  type="number"
                   name="area"
                   value={area}
                   onChange={(e) => setArea(e.target.value)}
@@ -212,8 +212,8 @@
                 Role
                 </label>
                 <select
-                  type="email"
-                  name="email"
+                  type="role"
+                  name="role"
                   value={role}
                   
                   onChange={(e) => setrole(e.target.value)}
@@ -221,7 +221,7 @@
                   className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition focus:border-cyan-500"
                 >
                   <option value="Shop Owner" >Shop Owner</option>
-                  <option value="Admin" >admin</option>
+                  <option value="Admin" >Admin</option>
                   
                   </select>
 

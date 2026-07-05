@@ -130,51 +130,61 @@ authRouter.post("/verify-admin", async (req, res) => {
     });
   }
 });
-
 authRouter.get("/records", async (req, res) => {
+  const authHeader = req.headers.authorization;
 
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({ success: false, message: "Unauthorized" });
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({
+      success: false,
+      message: "Unauthorized",
+    });
+  }
+
+  const token = authHeader.split(" ")[1];
+
+  jwt.verify(token, jwtsecret, async (err, decoded) => {
+    if (err) {
+      console.error("JWT verification error:", err);
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
     }
-    const token = authHeader.split(" ")[1];
 
-    jwt.verify(token, jwtsecret, async (err, decoded) => {
-      if (err) {
-        console.error("JWT verification error:", err);
-        return res
-          .status(401)
-          .json({ success: false, message: "Unauthorized" });
-      }
-      const shopnumber = decoded.shopnumber;
-      const record = await Response.findOne({
-  shopnumber: { $regex: new RegExp(`^${shopnumber}$`, "i") },
-}).lean();
+    const shopnumber = decoded.shopnumber;
 
-const user = await User.findOne({
-  sn: { $regex: new RegExp(`^${shopnumber}$`, "i") },
-})
-.select("-_id name email phone area maint role")
-.lean();
+    const record = await Response.findOne({
+      shopnumber: {
+        $regex: new RegExp(`^${shopnumber}$`, "i"),
+      },
+    }).lean();
 
-if (!record || !user) {
-  return res.status(404).json({
-    success: false,
-    message: "No data found",
+    const user = await User.findOne({
+      sn: {
+        $regex: new RegExp(`^${shopnumber}$`, "i"),
+      },
+    })
+      .select("-_id name email phone area maint role")
+      .lean();
+
+    if (!record || !user) {
+      return res.status(404).json({
+        success: false,
+        message: "No data found",
+      });
+    }
+
+    const data = {
+      ...record,
+      ...user,
+    };
+
+    return res.status(200).json({
+      success: true,
+      data,
+    });
   });
-}
-
-const data = {
-  ...record,
-  ...user,
-};
-
-return res.status(200).json({
-  success: true,
-  data,
-});
-    )};
-
+}); // <-- closes /records
 
 
 
@@ -222,31 +232,26 @@ authRouter.post("/new", async (req, res) => {
 });
 
 
+async function newStuff(area, email, maint, name, phone, sn, role) {
+  await User.create({
+    area,
+    email,
+    maint,
+    name,
+    phone,
+    sn,
+    role,
+  });
 
-async function newStuff(area, email,  maint, name, phone, sn, role) {
-  await User.insertMany([
-    {
-      area,
-      email,
-      maint,
-      name,
-      phone,
-      sn,
-      role,
-    }
-  ]);
-    await Response.create({
-  shopnumber: sn,
-  role: role ,
-  totalAmount: maint,
-  remainingAmount: maint,
-  installments: [],
-});
-
-app.post("/admin-verify" , async (req, res) =>{
-console.log(req)
-})
+  await Response.create({
+    shopnumber: sn,
+    role,
+    totalAmount: maint,
+    remainingAmount: maint,
+    installments: [],
+  });
 }
+
 
 
 

@@ -1,34 +1,48 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+import API from "../api/axios";
 
 export default function Admin() {
   const navigate = useNavigate();
+  const token = localStorage.getItem("token");
+
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const fetchRecords = async () => {
-      try {
-        const response = await fetch(`${API_URL}/api/auth/all-records`);
-        const data = await response.json();
+    async function loadAdminData() {
+      if (!token) {
+        navigate("/notfound");
+        return;
+      }
 
-        if (!response.ok) {
-          throw new Error(data.message || "Failed to load records");
+      try {
+        const verifyResponse = await API.post("/api/auth/verify-admin", {
+          token,
+        });
+
+        if (!verifyResponse.data?.message) {
+          navigate("/notfound");
+          return;
         }
 
-        setRecords(data.data || []);
+        const recordsResponse = await API.get("/api/auth/all-records");
+        setRecords(recordsResponse.data?.data || []);
       } catch (err) {
-        setError(err.message);
+        console.error("Admin load error:", err);
+        setError(
+          err.response?.data?.message ||
+            err.message ||
+            "Failed to load records",
+        );
       } finally {
         setLoading(false);
       }
-    };
+    }
 
-    fetchRecords();
-  }, []);
+    loadAdminData();
+  }, [navigate, token]);
 
   return (
     <div className="min-h-screen bg-slate-950 px-4 py-10 text-white">
