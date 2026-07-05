@@ -4,13 +4,12 @@ import Signup from "./pages/signup";
 import Result from "./pages/result";
 import Admin from "./pages/admin";
 import AddNew from "./pages/add_new.jsx";
-import API from "./api/axios.js"
+
 import NotFound from "./pages/404.jsx";
 
 
 
 function App() {
-  const token = localStorage.getItem("token");
 
 
   return (
