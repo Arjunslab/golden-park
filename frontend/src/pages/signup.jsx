@@ -1,22 +1,17 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import API from "../api/axios.js";
+
 
 export default function Signup() {
   const navigate = useNavigate();
   const [shopnumber, setShopnumber] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const token = localStorage.getItem("token");
-
-  useEffect(() => {
-    if (token) {
-      navigate("/result");
-    }
-  }, [token, navigate]);
+  const token = localStorage.getItem("token")
+  const [loading, setLoading] = useState(false)
 
   const handleSearch = async (e) => {
     e.preventDefault();
+    
     setError("");
 
     if (!shopnumber.trim()) {
@@ -25,28 +20,16 @@ export default function Signup() {
     }
 
     if (token) {
-      navigate("/result");
-      return;
+     navigate("/result")
     }
 
     setLoading(true);
 
     try {
-      const response = await API.get(
-        "/api/auth/login?shopnumber=" + shopnumber.trim(),
-      );
-
-      localStorage.setItem("token", response.data.token);
-      navigate("/result");
-    } catch (err) {
-      setError(
-        err.response?.data?.message ||
-          err.message ||
-          "Something went wrong. Please try again.",
-      );
-    } finally {
-      setLoading(false);
-    }
+      navigate("/otp" , {
+        state:{shopnumber}
+      } )
+    } catch{console.error}
   };
 
   return (

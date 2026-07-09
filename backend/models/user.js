@@ -9,7 +9,6 @@ const userSchema = new mongoose.Schema({
   name: {
     type: String,
     required: true,
-    
   },
   area: {
     type: Number,
@@ -18,7 +17,6 @@ const userSchema = new mongoose.Schema({
   phone: {
     type: String,
     required: true,
-  
   },
   maint: {
     type: Number,
@@ -27,13 +25,25 @@ const userSchema = new mongoose.Schema({
   email: {
     type: String,
     required: true,
-   
   },
   role: {
     type: String,
     enum: ["Admin", "Shop Owner"],
-    
-  }
+  },
+  emailVerified: {
+    type: Boolean,
+    default: false,
+  },
+
+  emailOtp: {
+    type: String,
+    default: null,
+  },
+
+  emailOtpExpires: {
+    type: Date,
+    default: null,
+  },
 });
 
 const installmentSchema = new mongoose.Schema(

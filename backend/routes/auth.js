@@ -1,31 +1,77 @@
 import express from "express";
-import jwt from "jsonwebtoken";
+import { randomInt } from "crypto";
+
 import User, { Response } from "../models/user.js";
 
+import { sendWelcomeEmail, sendOtpConsentEmail } from "../services/email.js";
+
+import {
+  createTempToken,
+  createLoginToken,
+  createVerificationToken,
+  verifyToken,
+} from "../utils/jwt.js";
+
+import { requireAuth } from "../middleware/auth.js";
+
 const authRouter = express.Router();
-const jwtsecret = process.env.JWT_SECRET;
 
-// console.log("JWT Secret in auth route:", jwtsecret);
-authRouter.get("/login", (req, res) => {
-  const { shopnumber } = req.query;
+function exactMatch(value) {
+  return new RegExp(
+    `^${String(value).replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")}$`,
+    "i",
+  );
+}
 
-  jwt.sign({ shopnumber }, jwtsecret, { expiresIn: "2d" }, (err, token) => {
-    if (err) {
-      console.error("JWT signing error:", err);
-      return res.status(500).json({ success: false, message: "Server error" });
+/* =====================================================
+   LOGIN
+===================================================== */
+
+authRouter.get("/login", async (req, res) => {
+  try {
+    const sn = req.query.shopnumber;
+
+    if (!sn) {
+      return res.status(400).json({
+        success: false,
+        message: "Shop number is required",
+      });
     }
 
-    res.status(200).json({
-      success: true,
-      token,
+    const user = await User.findOne({
+      sn: exactMatch(sn),
     });
-  });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    await sendWelcomeEmail(user.name, user.email, user.sn);
+
+    return res.status(200).json({
+      success: true,
+      otp_need: true,
+    });
+  } catch (err) {
+    console.error(err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Server Error",
+    });
+  }
 });
+
+/* =====================================================
+   SEARCH
+===================================================== */
 
 authRouter.post("/search", async (req, res) => {
   try {
-    const rawShopnumber = req.body.shopnumber;
-    const shopnumber = String(rawShopnumber || "").trim();
+    const { shopnumber } = req.body;
 
     if (!shopnumber) {
       return res.status(400).json({
@@ -34,135 +80,107 @@ authRouter.post("/search", async (req, res) => {
       });
     }
 
-    const escapedShopnumber = shopnumber.replace(
-      /[-/\\^$*+?.()|[\]{}]/g,
-      "\\$&",
-    );
-
     const record = await Response.findOne({
-      shopnumber: {
-        $regex: new RegExp(`^${escapedShopnumber}$`, "i"),
-      },
+      shopnumber: exactMatch(shopnumber),
     });
 
     if (!record) {
-      console.log(`No record found for shop number: ${shopnumber}`);
       return res.status(404).json({
         success: false,
-        message: "No data found for this shop number",
+        message: "No data found",
       });
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       data: record,
     });
-  } catch (error) {
-    console.error("Search error:", error);
-    res.status(500).json({
+  } catch (err) {
+    console.error(err);
+
+    return res.status(500).json({
       success: false,
-      message: "Server error while fetching data",
+      message: "Server Error",
     });
   }
 });
 
+/* =====================================================
+   ALL RECORDS
+===================================================== */
+
 authRouter.get("/all-records", async (req, res) => {
   try {
-    const records = await Response.find({}).sort({ shopnumber: 1 });
+    const records = await Response.find({})
+      .sort({
+        shopnumber: 1,
+      })
+      .lean();
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       data: records,
     });
-  } catch (error) {
-    console.error("All records error:", error);
-    res.status(500).json({
+  } catch (err) {
+    console.error(err);
+
+    return res.status(500).json({
       success: false,
       message: "Failed to fetch records",
     });
   }
 });
 
+/* =====================================================
+   VERIFY ADMIN
+===================================================== */
+
 authRouter.post("/verify-admin", async (req, res) => {
   try {
-    const token= req.body.token
+    const { token } = req.body;
 
-    const decoded = jwt.verify(token, jwtsecret);
-    console.log(decoded)
-    const rawShopnumber = decoded.shopnumber;
-    const shopnumber = String(rawShopnumber || "").trim();
+    const decoded = verifyToken(token);
 
-    if (!shopnumber) {
-      return res.status(400).json({
-        success: false,
-        message: "Shop number is required",
-      });
-    }
-
-    const escapedShopnumber = shopnumber.replace(
-      /[-/\\^$*+?.()|[\]{}]/g,
-      "\\$&",
-    );
-
-    const adminRecord = await Response.findOne({
-      shopnumber: {
-        $regex: new RegExp(`^${escapedShopnumber}$`, "i"),
-      },
+    const admin = await Response.findOne({
+      shopnumber: exactMatch(decoded.sn),
       role: "Admin",
     });
 
-    if (!adminRecord) {
-      return res.status(200).json({
-        success: true,
-        message: false,
-      });
-    }
-
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
-      message: "Admin access granted",
+      message: !!admin,
     });
-  } catch (error) {
-    console.error("Verify admin error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to verify admin access",
-    });
-  }
-});
-authRouter.get("/records", async (req, res) => {
-  const authHeader = req.headers.authorization;
+  } catch (err) {
+    console.error(err);
 
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return res.status(401).json({
       success: false,
       message: "Unauthorized",
     });
   }
+});
 
-  const token = authHeader.split(" ")[1];
+/* =====================================================
+   GET RECORDS
+===================================================== */
 
-  jwt.verify(token, jwtsecret, async (err, decoded) => {
-    if (err) {
-      console.error("JWT verification error:", err);
-      return res.status(401).json({
-        success: false,
-        message: "Unauthorized",
-      });
-    }
+authRouter.get("/records", requireAuth, async (req, res) => {
+  try {
+    const { sn } = req.user;
+    console.log("req.user =", req.user);
+    console.log("sn =", req.user.sn);
+    console.log(req.headers.authorization);
+    console.log(await Response.find().select("shopnumber"));
+    console.log(await User.find().select("sn"));
 
-    const shopnumber = decoded.shopnumber;
+
 
     const record = await Response.findOne({
-      shopnumber: {
-        $regex: new RegExp(`^${shopnumber}$`, "i"),
-      },
+      shopnumber: exactMatch(sn),
     }).lean();
 
     const user = await User.findOne({
-      sn: {
-        $regex: new RegExp(`^${shopnumber}$`, "i"),
-      },
+      sn: exactMatch(sn),
     })
       .select("-_id name email phone area maint role")
       .lean();
@@ -174,85 +192,290 @@ authRouter.get("/records", async (req, res) => {
       });
     }
 
-    const data = {
-      ...record,
-      ...user,
-    };
-
     return res.status(200).json({
       success: true,
-      data,
+      data: {
+        ...record,
+        ...user,
+      },
     });
-  });
-}); // <-- closes /records
+  } catch (err) {
+    console.error(err);
 
+    return res.status(500).json({
+      success: false,
+      message: "Server Error",
+    });
+  }
+});
 
+/* =====================================================
+   CREATE USER
+===================================================== */
 
-
-authRouter.post("/new", async (req, res) => {
+authRouter.post("/new", requireAuth, async (req, res) => {
   try {
-    const token = req.body.token;
-    const area = req.body.area;
-    const email = req.body.email;
-    const maint = req.body.maintenance;
-    const name = req.body.name;
-    const phone = req.body.phone;
-    const sn = req.body.shopnumber;
-    const role = req.body.role;
+    const {
+      area,
+      email,
+      maintenance,
+      name,
+      phone,
+      shopnumber,
+      role,
+    } = req.body;
 
-    const decoded = jwt.verify(token, jwtsecret);
+    const existingUser = await User.findOne({
+      $or: [
+        {
+          sn: exactMatch(shopnumber),
+        },
+        {
+          email: exactMatch(email),
+        },
+      ],
+    });
 
-    console.log(decoded);
-    console.log("Request body:", req.body);
-    console.log("maintenance =", maint);
+    if (existingUser) {
+      return res.status(409).json({
+        success: false,
+        message: "User already exists",
+      });
+    }
 
-    await newStuff(area, email, maint, name, phone, sn, role);
+    await User.create({
+      area,
+      email,
+      maint: maintenance,
+      name,
+      phone,
+      sn: shopnumber,
+      role,
+    });
+
+    await Response.create({
+      shopnumber,
+      role,
+      totalAmount: maintenance,
+      remainingAmount: maintenance,
+      installments: [],
+    });
 
     return res.status(201).json({
       success: true,
       message: "User created successfully",
     });
   } catch (err) {
-    console.error("Create user error:", err);
+    console.error(err);
 
     if (err.code === 11000) {
-      const field = Object.keys(err.keyPattern || {})[0];
-
       return res.status(409).json({
         success: false,
-        message: `${field} already exists`,
+        message: "Duplicate record",
       });
     }
 
     return res.status(500).json({
       success: false,
-      message: err.message || "Internal server error",
+      message: "Internal Server Error",
     });
   }
 });
 
 
-async function newStuff(area, email, maint, name, phone, sn, role) {
-  await User.create({
-    area,
-    email,
-    maint,
-    name,
-    phone,
-    sn,
-    role,
-  });
+/* =====================================================
+   SEND OTP
+===================================================== */
 
-  await Response.create({
-    shopnumber: sn,
-    role,
-    totalAmount: maint,
-    remainingAmount: maint,
-    installments: [],
-  });
-}
+authRouter.post("/send-otp", async (req, res) => {
+  try {
+    const { shopnumber } = req.body;
+
+    if (!shopnumber?.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Shop number is required",
+      });
+    }
+
+    const user = await User.findOne({
+      sn: exactMatch(shopnumber),
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // Generate OTP
+    const otp = randomInt(100000, 1000000).toString();
+
+    user.emailOtp = otp;
+    user.emailOtpExpires = new Date(Date.now() + 10 * 60 * 1000);
+    user.emailVerified = false;
+
+    await user.save();
+
+    // Create verification link
+    const verificationToken = createVerificationToken(
+      user.sn,
+      user.email
+    );
+
+    const verificationLink =
+      `https://golden.bajpai.dev/verify-email?token=${verificationToken}`;
+
+    // Send Email
+    await sendOtpConsentEmail(
+      user.name,
+      user.email,
+      otp,
+      verificationLink
+    );
+
+    // Temporary login session
+    const tempToken = createTempToken(user.sn);
+
+    return res.status(200).json({
+      success: true,
+      token: tempToken,
+      message: "OTP sent successfully",
+    });
+  } catch (err) {
+    console.error("Send OTP Error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+    });
+  }
+});
+
+/* =====================================================
+   VERIFY OTP
+===================================================== */
+
+authRouter.post("/verify-otp", async (req, res) => {
+  try {
+    const { otp, token } = req.body;
+
+  
+
+    if (!otp || !token) {
+      return res.status(400).json({
+        success: false,
+        message: "OTP and token are required",
+      });
+    }
+
+    const decoded = verifyToken(token);
+
+    const user = await User.findOne({
+      sn: exactMatch(decoded.sn),
+    });
+console.log("Stored:", user.emailOtp);
+console.log("Received:", otp);
 
 
 
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    if (!user.emailOtp || user.emailOtp !== otp) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid OTP",
+      });
+    }
+
+    if (
+      !user.emailOtpExpires ||
+      user.emailOtpExpires < new Date()
+    ) {
+      return res.status(401).json({
+        success: false,
+        message: "OTP has expired",
+      });
+    }
+
+    user.emailVerified = true;
+    user.emailOtp = undefined;
+    user.emailOtpExpires = undefined;
+
+    await user.save();
+
+    const loginToken = createLoginToken(user.sn);
+
+    return res.status(200).json({
+      success: true,
+      token: loginToken,
+      message: "OTP verified successfully",
+    });
+  } catch (err) {
+    console.error("Verify OTP Error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to verify OTP",
+    });
+  }
+});
+
+/* =====================================================
+   VERIFY EMAIL LINK
+===================================================== */
+
+authRouter.post("/verify-link", async (req, res) => {
+  try {
+    const { verificationToken } = req.body;
+
+    if (!verificationToken) {
+      return res.status(400).json({
+        success: false,
+        message: "Verification token is required",
+      });
+    }
+
+    const decoded = verifyToken(verificationToken);
+
+    const user = await User.findOne({
+      email: decoded.email,
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    user.emailVerified = true;
+    user.emailOtp = undefined;
+    user.emailOtpExpires = undefined;
+
+    await user.save();
+
+    const loginToken = createLoginToken(user.sn);
+
+    return res.status(200).json({
+      success: true,
+      token: loginToken,
+      message: "Email verified successfully",
+    });
+  } catch (err) {
+    console.error("Verify Link Error:", err);
+
+    return res.status(401).json({
+      success: false,
+      message: "Invalid or expired verification link",
+    });
+  }
+});
 
 export default authRouter;

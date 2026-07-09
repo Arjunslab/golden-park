@@ -4,11 +4,15 @@ import dotenv from "dotenv";
 import connectToDatabase from "./connector.js";
 import authRoute from "./routes/auth.js";
 import jwt from "jsonwebtoken";
+import { Resend } from "resend" ;
+import crypto from "crypto" ;
+import { getOtpTemplate , getWelcomeTemplate } from "./emails/templates.js";
 
 
 dotenv.config();
 const jwtsecret = process.env.JWT_SECRET;
-
+const otp = crypto.randomInt(100000, 1000000).toString();
+const resend = new Resend(process.env.RESEND_KEY);
 
 const app = express();
 app.use(
