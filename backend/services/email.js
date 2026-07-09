@@ -1,4 +1,6 @@
 import { Resend } from "resend";
+import { getWelcomeTemplate, getOtpTemplate } from "../emails/templates";
+
 
 const resend = new Resend(process.env.RESEND_KEY);
 
