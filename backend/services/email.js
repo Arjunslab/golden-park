@@ -1,6 +1,4 @@
 import { Resend } from "resend";
-import { getWelcomeTemplate, getOtpTemplate } from "../emails/templates.js";
-import { Dotenv } from "dotenv";
 
 const resend = new Resend(process.env.RESEND_KEY);
 
