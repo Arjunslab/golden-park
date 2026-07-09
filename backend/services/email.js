@@ -1,5 +1,5 @@
 import { Resend } from "resend";
-import { getWelcomeTemplate, getOtpTemplate } from "../emails/templates";
+import { getWelcomeTemplate, getOtpTemplate } from "../emails/templates.js";
 
 
 const resend = new Resend(process.env.RESEND_KEY);
