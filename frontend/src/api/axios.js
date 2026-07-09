@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const base = import.meta.env.VITE_BASE_URL || "http://localhost:5000/";
+const base = import.meta.env.VITE_BASE_URL || "http://backend.golden.bajpai.dev/";
 const API = axios.create({
   baseURL: base,
   withCredentials: true
